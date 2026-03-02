@@ -8,6 +8,9 @@ inputs:
     description: "Additional arguments for mix deps.get (e.g. '--only prod')"
     required: false
     default: ""
+branding:
+  icon: "droplet"
+  color: "purple"
 runs:
   using: "composite"
   steps:
