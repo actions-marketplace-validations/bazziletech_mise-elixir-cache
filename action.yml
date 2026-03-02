@@ -1,0 +1,45 @@
+name: "Mise Elixir Cache"
+description: "Cache Mix deps/_build, clean on retry, and fetch dependencies"
+inputs:
+  mix-env:
+    description: "MIX_ENV value for cache key segmentation"
+    required: true
+  deps-get-args:
+    description: "Additional arguments for mix deps.get (e.g. '--only prod')"
+    required: false
+    default: ""
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/cache@v5
+      id: mix-cache
+      with:
+        path: |
+          deps
+          _build
+        key: ${{ runner.os }}-${{ inputs.mix-env }}-mise-${{ hashFiles('**/mise.toml') }}-mix-${{ hashFiles('**/mix.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ inputs.mix-env }}-mise-${{ hashFiles('**/mise.toml') }}-mix-
+          ${{ runner.os }}-${{ inputs.mix-env }}-mise-
+    # Cache Hex registry and Mix archives to avoid network round-trips to hex.pm
+    # Must be restored BEFORE "Clean on retry" which needs Hex to parse mix.exs
+    - name: Restore Hex/Mix home cache
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~/.hex
+          ~/.mix
+        key: hex-mix-home-${{ runner.os }}-${{ hashFiles('**/mise.toml') }}
+    - name: Clean on retry
+      if: github.run_attempt > 1
+      shell: bash
+      run: |
+        mix local.hex --force --if-missing
+        mix local.rebar --force --if-missing
+        mix deps.clean --all
+        mix clean
+    # Always run deps.get: it installs Hex/rebar (not cached) and is fast (~1s) on cache hit
+    - shell: bash
+      env:
+        DEPS_GET_ARGS: ${{ inputs.deps-get-args }}
+      run: mix deps.get $DEPS_GET_ARGS
